@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Cara a Cara - Simpsons Edition</title>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+        import { getFirestore, collection, query, where, getDocs, updateDoc, doc, getDoc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyDHF4ziJeDqOj6FtAKHvM3v_EZpJH_FPhY",
+            authDomain: "cara-a-cara-simpsons.firebaseapp.com",
+            projectId: "cara-a-cara-simpsons",
+            storageBucket: "cara-a-cara-simpsons.firebasestorage.app",
+            messagingSenderId: "1031962483032",
+            appId: "1:1031962483032:web:3c56cdc3f3b3a622fdad2d"
+        };
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const provider = new GoogleAuthProvider();
+        
+        window.auth = auth;
+        window.db = db;
+        window.provider = provider;
+        window.signInWithPopup = signInWithPopup;
+        window.onAuthStateChanged = onAuthStateChanged;
+        window.signOut = signOut;
+        window.collection = collection;
+        window.query = query;
+        window.where = where;
+        window.getDocs = getDocs;
+        window.updateDoc = updateDoc;
+        window.doc = doc;
+        window.getDoc = getDoc;
+        window.setDoc = setDoc;
+        window.deleteDoc = deleteDoc;
+        window.onSnapshot = onSnapshot;
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Comic Neue', 'Comic Sans MS', cursive;
+            background: linear-gradient(135deg, #FED90F 0%, #FFB800 50%, #F9A800 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        .cloud {
+            position: fixed;
+            background: rgba(255,255,255,0.8);
+            border-radius: 1000px;
+            pointer-events: none;
+            z-index: 0;
+            animation: floatCloud linear infinite;
+        }
+        @keyframes floatCloud {
+            from { transform: translateX(-100vw); }
+            to { transform: translateX(100vw); }
+        }
+        .container {
+            position: relative;
+            z-index: 1;
+            max-width: 1300px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .character-card {
+            background: linear-gradient(135deg, #fff 0%, #FFE4A0 100%);
+            border-radius: 16px;
+            padding: 12px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            cursor: pointer;
+            text-align: center;
+        }
+        .character-card:hover:not(.eliminated) {
+            transform: translateY(-5px) scale(105%);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+        }
+        .character-card.eliminated {
+            opacity: 0.3;
+            filter: grayscale(0.8);
+        }
+        .btn {
+            padding: 12px 24px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .btn-primary { background: #00B5F7; color: white; box-shadow: 0 4px 0 #0088BB; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 0 #0088BB; }
+        .btn-success { background: #4CAF50; color: white; box-shadow: 0 4px 0 #388E3C; }
+        .btn-danger { background: #f44336; color: white; box-shadow: 0 4px 0 #d32f2f; }
+        .btn-warning { background: #FF9800; color: white; box-shadow: 0 4px 0 #E68900; }
+        .btn-google { background: #DB4437; color: white; box-shadow: 0 4px 0 #A52714; }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal.active { display: flex; }
+        .modal-content {
+            background: white;
+            border-radius: 24px;
+            padding: 30px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            animation: bounceIn 0.3s ease;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        @keyframes bounceIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .characters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+            gap: 12px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 5px;
+        }
+        @media (max-width: 600px) {
+            .characters-grid { grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); }
+            .character-card { padding: 8px; }
+            .character-card div { font-size: 32px !important; }
+        }
+        .question-btn {
+            background: #E8E8E8;
+            padding: 12px;
+            margin: 6px 0;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+            font-weight: bold;
+        }
+        .question-btn:hover { background: #00B5F7; color: white; transform: translateX(5px); }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 50px;
+            z-index: 1000;
+            animation: slideUp 0.3s ease;
+        }
+        @keyframes slideUp {
+            from { transform: translateX(-50%) translateY(100px); opacity: 0; }
+            to { transform: translateX(-50%) translateY(0); opacity: 1; }
+        }
+        .profile-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #FED90F;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+        }
+        .turn-mine { background: #4CAF50; color: white; animation: pulse 1s infinite; }
+        .turn-opponent { background: #f44336; color: white; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        .turn-indicator { padding: 10px 20px; border-radius: 50px; font-weight: bold; display: inline-block; }
+        .lobby-room {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 12px;
+            margin: 10px 0;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        .lobby-room:hover { background: #e0e0e0; border-color: #00B5F7; }
+        .room-code {
+            font-family: monospace;
+            font-size: 20px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            background: #333;
+            color: #FED90F;
+            padding: 8px 15px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+        .avatar-option {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: #FED90F;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            margin: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .avatar-option:hover, .avatar-option.selected {
+            transform: scale(1.1);
+            box-shadow: 0 0 0 3px #00B5F7;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #FED90F;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .join-room-input {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.9);
+            border-radius: 15px;
+        }
+        .join-room-input input {
+            flex: 1;
+            padding: 12px;
+            font-size: 18px;
+            text-transform: uppercase;
+            text-align: center;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-family: monospace;
+            letter-spacing: 3px;
+        }
+        .divider {
+            text-align: center;
+            margin: 20px 0;
+            position: relative;
+        }
+        .divider:before, .divider:after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            width: 45%;
+            height: 1px;
+            background: #ccc;
+        }
+        .divider:before { left: 0; }
+        .divider:after { right: 0; }
+        .divider span { background: white; padding: 0 10px; font-size: 14px; color: #999; }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <div id="clouds"></div>
+    <div class="container">
+        <!-- TELA DE LOGIN -->
+        <div id="loginScreen">
+            <div style="text-align: center; padding: 50px 20px;">
+                <h1 style="font-size: 3rem; color: #fff; text-shadow: 4px 4px 0 #0088BB;">🎭 Cara a Cara</h1>
+                <h2 style="font-size: 1.8rem; color: #FFE4A0; margin-top: -10px;">Simpsons Edition</h2>
+                <div style="margin-top: 50px;">
+                    <button class="btn btn-google" onclick="window.loginWithGoogle()" style="font-size: 1.2rem; padding: 15px 30px;">
+                        🚀 Entrar com Google
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TELA INICIAL -->
+        <div id="homeScreen" style="display: none;">
+            <div style="text-align: center; padding: 30px 20px;">
+                <div id="userInfo" style="display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,0.3); padding: 15px; border-radius: 20px; margin-bottom: 30px;">
+                    <div id="userAvatar" class="profile-avatar">👤</div>
+                    <div id="userName"></div>
+                    <button class="btn" style="background: #f44336; padding: 8px 16px;" onclick="window.logout()">Sair</button>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 15px; max-width: 320px; margin: 0 auto;">
+                    <button class="btn btn-primary" onclick="window.showLobby()">🌐 Jogar Online</button>
+                    <button class="btn btn-success" onclick="window.startRobotGame()">🤖 Jogar contra Robô</button>
+                    <button class="btn btn-warning" onclick="window.showProfileEditor()">✏️ Editar Perfil</button>
+                    <button class="btn" style="background: #9C27B0; color: white;" onclick="window.showRanking()">🏆 Ranking</button>
+                </div>
+                <div id="statsDisplay" style="margin-top: 30px; padding: 15px; background: rgba(255,255,255,0.3); border-radius: 20px;"></div>
+            </div>
+        </div>
+
+        <!-- LOBBY -->
+        <div id="lobbyScreen" style="display: none;">
+            <div style="background: white; border-radius: 20px; padding: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2>🌐 Lobby Online</h2>
+                    <button class="btn" style="background: #999;" onclick="window.backToHome()">← Voltar</button>
+                </div>
+                
+                <!-- CAMPO PARA ENTRAR EM SALA POR CÓDIGO -->
+                <div class="join-room-input">
+                    <input type="text" id="joinRoomCode" placeholder="Ex: ABC123" maxlength="6" style="text-transform: uppercase;" onkeyup="this.value = this.value.toUpperCase()">
+                    <button class="btn btn-primary" onclick="window.joinByCode()" style="padding: 12px 20px;">🔑 Entrar</button>
+                </div>
+                
+                <div class="divider"><span>ou</span></div>
+                
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-primary" onclick="window.createRoom()" style="width: 100%;">➕ Criar Nova Sala</button>
+                </div>
+                
+                <div style="margin-top: 20px;">
+                    <h3>📡 Salas Disponíveis:</h3>
+                    <div id="roomsList" style="margin-top: 15px; min-height: 200px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- JOGO ONLINE -->
+        <div id="onlineGameScreen" style="display: none;">
+            <div style="background: white; border-radius: 20px; padding: 20px; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div><strong>🏠 Sala:</strong> <span id="roomCodeDisplay" class="room-code">-</span></div>
+                    <div><strong>🎯 Restantes:</strong> <span id="remainingCount" style="font-size: 28px; color: #00B5F7;">0</span></div>
+                    <div id="turnDisplay"></div>
+                    <button class="btn" style="background: #999;" onclick="window.leaveRoom()">🚪 Sair</button>
+                </div>
+                <div id="playersInRoom" style="margin-top: 10px; padding: 10px; background: #f0f0f0; border-radius: 10px;"></div>
+                <div style="margin-top: 10px; background: #fff3cd; padding: 8px; border-radius: 8px;">
+                    🤫 Seu personagem secreto: <strong id="onlineMySecret">???</strong>
+                </div>
+            </div>
+            <div style="background: white; border-radius: 20px; padding: 20px; margin-bottom: 15px;">
+                <h3>🎭 Personagens do Oponente <span style="font-size: 12px;">(clique para eliminar)</span></h3>
+                <div id="onlineCharactersGrid" class="characters-grid"></div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div style="background: white; border-radius: 20px; padding: 20px;">
+                    <h3>❓ Faça uma Pergunta</h3>
+                    <div id="onlineQuestionsList"></div>
+                    <div id="onlineAnswerArea" style="display: none; margin-top: 15px;">
+                        <p>O oponente respondeu:</p>
+                        <button class="btn btn-success" style="margin:5px;" onclick="window.submitOnlineAnswer('yes')">✅ Sim</button>
+                        <button class="btn btn-danger" style="margin:5px;" onclick="window.submitOnlineAnswer('no')">❌ Não</button>
+                    </div>
+                </div>
+                <div style="background: white; border-radius: 20px; padding: 20px;">
+                    <h3>💬 Chat</h3>
+                    <div id="onlineChatMessages" style="height: 250px; overflow-y: auto; margin-bottom: 10px; padding: 10px; background: #f5f5f5; border-radius: 12px;"></div>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="onlineChatInput" placeholder="Mensagem..." style="flex:1; padding: 10px; border-radius: 20px; border:1px solid #ddd;" onkeypress="if(event.key==='Enter') window.sendOnlineMessage()">
+                        <button class="btn" style="background:#00B5F7; padding:10px 15px;" onclick="window.sendOnlineMessage()">Enviar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- JOGO ROBÔ -->
+        <div id="robotGameScreen" style="display: none;">
+            <div style="background: white; border-radius: 20px; padding: 15px; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div><strong>🤖 Modo Robô</strong></div>
+                    <div><strong>🎯 Restantes:</strong> <span id="robotRemainingCount" style="font-size: 24px; color:#00B5F7;">0</span></div>
+                    <div id="robotTurnDisplay"></div>
+                    <button class="btn" style="background:#999;" onclick="window.backToHome()">🏠 Sair</button>
+                </div>
+                <div style="margin-top: 10px; background: #fff3cd; padding: 8px; border-radius: 8px;">
+                    🤫 Seu personagem secreto: <strong id="mySecretCharacter">???</strong>
+                </div>
+            </div>
+            <div style="background: white; border-radius: 20px; padding: 20px; margin-bottom: 15px;">
+                <h3>🎭 Personagens do Robô <span style="font-size: 12px;">(clique para eliminar)</span></h3>
+                <div id="robotCharactersGrid" class="characters-grid"></div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div style="background: white; border-radius: 20px; padding: 20px;">
+                    <h3>❓ Perguntas</h3>
+                    <div id="robotQuestionsList"></div>
+                    <div id="robotAnswerArea" style="display: none; margin-top: 15px;">
+                        <p>O robô respondeu:</p>
+                        <button class="btn btn-success" onclick="window.submitRobotAnswer('yes')">✅ Sim</button>
+                        <button class="btn btn-danger" onclick="window.submitRobotAnswer('no')">❌ Não</button>
+                    </div>
+                </div>
+                <div style="background: white; border-radius: 20px; padding: 20px;">
+                    <h3>💬 Chat com Robô</h3>
+                    <div id="robotChatMessages" style="height: 250px; overflow-y: auto; margin-bottom: 10px; padding: 10px; background: #f5f5f5; border-radius: 12px;"></div>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="robotChatInput" placeholder="Mensagem..." style="flex:1; padding: 10px; border-radius: 20px; border:1px solid #ddd;" onkeypress="if(event.key==='Enter') window.sendRobotMessage()">
+                        <button class="btn" style="background:#00B5F7; padding:10px 15px;" onclick="window.sendRobotMessage()">Enviar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAIS -->
+<div id="profileEditorModal" class="modal">
+    <div class="modal-content">
+        <h2>✏️ Editar Perfil</h2>
+        <div id="avatarSelector" style="display: flex; flex-wrap: wrap; justify-content: center; margin: 20px 0;">
+            <div class="avatar-option" data-avatar="👤">👤</div>
+            <div class="avatar-option" data-avatar="🍩">🍩</div>
+            <div class="avatar-option" data-avatar="🛹">🛹</div>
+            <div class="avatar-option" data-avatar="🎷">🎷</div>
+            <div class="avatar-option" data-avatar="🍺">🍺</div>
+            <div class="avatar-option" data-avatar="🐶">🐶</div>
+            <div class="avatar-option" data-avatar="⭐">⭐</div>
+            <div class="avatar-option" data-avatar="🤡">🤡</div>
+            <div class="avatar-option" data-avatar="💰">💰</div>
+            <div class="avatar-option" data-avatar="👊">👊</div>
+        </div>
+        <input type="text" id="editNickname" placeholder="Seu nome" style="width:100%; padding:10px; border-radius:10px; border:1px solid #ddd; margin:10px 0;">
+        <button class="btn btn-primary" onclick="window.saveProfile()">Salvar</button>
+        <button class="btn" style="background:#ccc; margin-top:10px;" onclick="window.closeModal('profileEditorModal')">Cancelar</button>
+    </div>
+</div>
+
+<div id="rankingModal" class="modal">
+    <div class="modal-content">
+        <h2>🏆 Ranking Global</h2>
+        <div id="globalRankingList" style="margin: 15px 0; max-height: 400px; overflow-y: auto;"></div>
+        <button class="btn" style="background:#ccc;" onclick="window.closeModal('rankingModal')">Fechar</button>
+    </div>
+</div>
+
+<div id="victoryModal" class="modal">
+    <div class="modal-content">
+        <h2 id="victoryTitle">🎉 VITÓRIA!</h2>
+        <p id="victoryMessage" style="margin: 15px 0;">Parabéns!</p>
+        <button class="btn btn-primary" onclick="window.playAgain()">🔁 Jogar Novamente</button>
+        <button class="btn" style="margin-top:10px; background:#999;" onclick="window.backToHome()">🏠 Menu</button>
+    </div>
+</div>
+
+<div id="waitingModal" class="modal">
+    <div class="modal-content">
+        <div class="loading" style="margin: 20px auto;"></div>
+        <h3>Aguardando oponente...</h3>
+        <p id="waitingCode"></p>
+        <button class="btn" style="margin-top:20px; background:#f44336;" onclick="window.cancelWait()">Cancelar</button>
+    </div>
+</div>
+
+<script>
+    // ==================== DADOS ====================
+    const characters = [
+        { id: 1, name: 'Homer', emoji: '🍩', features: ['homem', 'adulto', 'careca', 'familia'] },
+        { id: 2, name: 'Marge', emoji: '💙', features: ['mulher', 'adulto', 'cabelo_azul', 'familia'] },
+        { id: 3, name: 'Bart', emoji: '🛹', features: ['homem', 'crianca', 'familia'] },
+        { id: 4, name: 'Lisa', emoji: '🎷', features: ['mulher', 'crianca', 'familia'] },
+        { id: 5, name: 'Maggie', emoji: '🍼', features: ['mulher', 'bebe', 'familia'] },
+        { id: 6, name: 'Moe', emoji: '🍺', features: ['homem', 'adulto', 'careca'] },
+        { id: 7, name: 'Ned Flanders', emoji: '🙏', features: ['homem', 'adulto', 'oculos'] },
+        { id: 8, name: 'Krusty', emoji: '🤡', features: ['homem', 'adulto'] },
+        { id: 9, name: 'Sr. Burns', emoji: '💰', features: ['homem', 'idoso', 'careca'] },
+        { id: 10, name: 'Nelson', emoji: '👊', features: ['homem', 'crianca'] },
+        { id: 11, name: 'Milhouse', emoji: '👓', features: ['homem', 'crianca', 'oculos'] },
+        { id: 12, name: 'Ralfe', emoji: '⭐', features: ['homem', 'crianca'] }
+    ];
+
+    const questions = [
+        { id: 1, text: '👨 É homem?', feature: 'homem' },
+        { id: 2, text: '👩 É mulher?', feature: 'mulher' },
+        { id: 3, text: '🧑 É adulto?', feature: 'adulto' },
+        { id: 4, text: '🧒 É criança?', feature: 'crianca' },
+        { id: 5, text: '👓 Usa óculos?', feature: 'oculos' },
+        { id: 6, text: '🏠 É da família Simpson?', feature: 'familia' },
+        { id: 7, text: '🦲 É careca?', feature: 'careca' },
+        { id: 8, text: '💙 Tem cabelo azul?', feature: 'cabelo_azul' }
+    ];
+
+    // ==================== VARIÁVEIS ====================
+    let currentUser = null, userProfile = null, selectedAvatar = '👤';
+    let robotGameActive = false, robotAvailable = [], robotSecret = null, robotOpponent = null, robotTurn = 'player', robotQuestion = null, robotWaiting = false, robotChat = [];
+    let onlineGameActive = false, currentRoom = null, onlineAvailable = [], onlineSecret = null, onlineOpponent = null, onlineTurn = null, onlineQuestion = null, onlineWaiting = false, onlineChat = [], roomUnsub = null, roomsUnsub = null;
+    let waitingRoomCode = null;
+
+    // ==================== FIREBASE ====================
+    window.loginWithGoogle = async function() {
+        try {
+            const result = await window.signInWithPopup(window.auth, window.provider);
+            currentUser = result.user;
+            const userRef = window.doc(window.db, 'users', currentUser.uid);
+            const userSnap = await window.getDoc(userRef);
+            if (userSnap.exists()) {
+                userProfile = userSnap.data();
+            } else {
+                userProfile = { uid: currentUser.uid, name: currentUser.displayName, avatar: '👤', wins: 0, losses: 0, matches: 0 };
+                await window.setDoc(userRef, userProfile);
+            }
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('homeScreen').style.display = 'block';
+            updateUI();
+            showToast(`Bem-vindo, ${userProfile.name}!`);
+        } catch(e) { showToast('Erro no login: ' + e.message, true); }
+    };
+
+    window.logout = async function() {
+        await window.signOut(window.auth);
+        currentUser = null;
+        document.getElementById('homeScreen').style.display = 'none';
+        document.getElementById('loginScreen').style.display = 'block';
+        showToast('Desconectado!');
+    };
+
+    async function updateUI() {
+        if (!userProfile) return;
+        document.getElementById('userAvatar').innerHTML = userProfile.avatar || '👤';
+        document.getElementById('userName').innerHTML = `<strong>${userProfile.name}</strong>`;
+        document.getElementById('statsDisplay').innerHTML = `
+            <div style="display: flex; justify-content: center; gap: 30px;">
+                <div>🏆 ${userProfile.wins || 0} Vitórias</div>
+                <div>😢 ${userProfile.losses || 0} Derrotas</div>
+                <div>📊 ${userProfile.matches || 0} Partidas</div>
+            </div>
+        `;
+    }
+
+    async function updateStats(won) {
+        if (!userProfile) return;
+        userProfile.matches = (userProfile.matches || 0) + 1;
+        if (won) userProfile.wins = (userProfile.wins || 0) + 1;
+        else userProfile.losses = (userProfile.losses || 0) + 1;
+        await window.setDoc(window.doc(window.db, 'users', currentUser.uid), userProfile);
+        updateUI();
+    }
+
+    // ==================== RANKING ====================
+    window.showRanking = async function() {
+        showToast('Carregando ranking...');
+        try {
+            const users = [];
+            const snapshot = await window.getDocs(window.collection(window.db, 'users'));
+            snapshot.forEach(doc => users.push(doc.data()));
+            users.sort((a,b) => (b.wins||0) - (a.wins||0));
+            if (users.length === 0) {
+                document.getElementById('globalRankingList').innerHTML = '<p style="text-align:center;">Nenhum jogador ainda</p>';
+            } else {
+                document.getElementById('globalRankingList').innerHTML = users.slice(0,20).map((u,i) => `
+                    <div style="display: flex; justify-content: space-between; padding: 12px; border-bottom: 1px solid #eee;">
+                        <span><strong>${i+1}º</strong> ${u.avatar || '👤'} ${u.name}</span>
+                        <span>🏆 ${u.wins||0}V | ${u.losses||0}D</span>
+                    </div>
+                `).join('');
+            }
+            document.getElementById('rankingModal').classList.add('active');
+        } catch(e) {
+            showToast('Erro ao carregar ranking: ' + e.message, true);
+        }
+    };
+
+    // ==================== PERFIL ====================
+    window.showProfileEditor = function() {
+        document.getElementById('editNickname').value = userProfile?.name || '';
+        selectedAvatar = userProfile?.avatar || '👤';
+        document.querySelectorAll('#avatarSelector .avatar-option').forEach(el => {
+            el.classList.toggle('selected', el.dataset.avatar === selectedAvatar);
+            el.onclick = () => { 
+                selectedAvatar = el.dataset.avatar; 
+                document.querySelectorAll('#avatarSelector .avatar-option').forEach(a=>a.classList.remove('selected')); 
+                el.classList.add('selected'); 
+            };
+        });
+        document.getElementById('profileEditorModal').classList.add('active');
+    };
+
+    window.saveProfile = async function() {
+        const newName = document.getElementById('editNickname').value.trim();
+        if (newName) userProfile.name = newName;
+        userProfile.avatar = selectedAvatar;
+        await window.setDoc(window.doc(window.db, 'users', currentUser.uid), userProfile);
+        updateUI();
+        closeModal('profileEditorModal');
+        showToast('Perfil atualizado!');
+    };
+
+    // ==================== LOBBY ====================
+    window.showLobby = function() {
+        document.getElementById('homeScreen').style.display = 'none';
+        document.getElementById('lobbyScreen').style.display = 'block';
+        loadRooms();
+        
+        // Atualizar salas em tempo real
+        if (roomsUnsub) roomsUnsub();
+        const q = window.query(window.collection(window.db, 'rooms'), window.where('status', '==', 'waiting'));
+        roomsUnsub = window.onSnapshot(q, (snapshot) => {
+            const roomsDiv = document.getElementById('roomsList');
+            if (snapshot.empty) {
+                roomsDiv.innerHTML = '<div style="text-align:center; padding:40px;">📭 Nenhuma sala disponível. Crie uma!</div>';
+                return;
+            }
+            roomsDiv.innerHTML = '';
+            snapshot.forEach(doc => {
+                const room = doc.data();
+                roomsDiv.innerHTML += `
+                    <div class="lobby-room" onclick="window.joinRoom('${room.code}')">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <div style="font-size:24px;">🏠 <strong>${room.code}</strong></div>
+                                <div style="font-size:12px;">👥 ${room.players?.length || 1}/2 jogadores</div>
+                            </div>
+                            <div>
+                                <div>Criador: ${room.ownerName}</div>
+                                <button class="btn" style="padding:5px 15px; background:#00B5F7; margin-top:5px;" onclick="event.stopPropagation(); window.joinRoom('${room.code}')">Entrar</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        });
+    };
+
+    // NOVA FUNÇÃO: Entrar por código digitado
+    window.joinByCode = async function() {
+        const code = document.getElementById('joinRoomCode').value.trim().toUpperCase();
+        if (!code) {
+            showToast('Digite um código de sala!', true);
+            return;
+        }
+        await joinRoom(code);
+    };
+
+    window.createRoom = async function() {
+        const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const roomData = {
+            code: code,
+            ownerId: currentUser.uid,
+            ownerName: userProfile.name,
+            status: 'waiting',
+            players: [{ uid: currentUser.uid, name: userProfile.name, avatar: userProfile.avatar, character: null, ready: false }],
+            createdAt: new Date().toISOString()
+        };
+        try {
+            await window.setDoc(window.doc(window.db, 'rooms', code), roomData);
+            showToast(`Sala ${code} criada! Aguardando oponente...`);
+            waitingRoomCode = code;
+            document.getElementById('waitingCode').innerHTML = `Código: <strong>${code}</strong><br>Compartilhe com um amigo!`;
+            document.getElementById('waitingModal').classList.add('active');
+            
+            // Aguardar oponente
+            const roomRef = window.doc(window.db, 'rooms', code);
+            const unsub = window.onSnapshot(roomRef, (doc) => {
+                if (doc.exists()) {
+                    const room = doc.data();
+                    if (room.players.length === 2) {
+                        unsub();
+                        document.getElementById('waitingModal').classList.remove('active');
+                        startOnlineGame(room);
+                    }
+                }
+            });
+        } catch(e) {
+            showToast('Erro ao criar sala: ' + e.message, true);
+        }
+    };
+
+    window.cancelWait = async function() {
+        if (waitingRoomCode) {
+            await window.deleteDoc(window.doc(window.db, 'rooms', waitingRoomCode));
+            waitingRoomCode = null;
+        }
+        document.getElementById('waitingModal').classList.remove('active');
+        showLobby();
+    };
+
+    window.joinRoom = async function(roomCode) {
+        const roomRef = window.doc(window.db, 'rooms', roomCode);
+        const roomSnap = await window.getDoc(roomRef);
+        if (!roomSnap.exists()) { showToast('Sala não encontrada', true); return; }
+        const room = roomSnap.data();
+        if (room.players.length >= 2) { showToast('Sala cheia!', true); return; }
+        
+        // Verificar se já está na sala
+        if (room.players.some(p => p.uid === currentUser.uid)) {
+            showToast('Você já está nesta sala!', true);
+            return;
+        }
+        
+        // Adicionar jogador
+        room.players.push({ uid: currentUser.uid, name: userProfile.name, avatar: userProfile.avatar, character: null, ready: false });
+        
+        // Sortear personagens
+        const available = [...characters];
+        for (let p of room.players) {
+            const idx = Math.floor(Math.random() * available.length);
+            p.character = available[idx];
+            available.splice(idx, 1);
+        }
+        room.status = 'playing';
+        room.currentTurn = room.players[0].uid;
+        await window.setDoc(roomRef, room);
+        
+        startOnlineGame(room);
+    };
+
+    function startOnlineGame(room) {
+        if (roomsUnsub) roomsUnsub();
+        currentRoom = room;
+        onlineGameActive = true;
+        const myPlayer = room.players.find(p => p.uid === currentUser.uid);
+        const opponent = room.players.find(p => p.uid !== currentUser.uid);
+        onlineSecret = myPlayer.character;
+        onlineOpponent = opponent.character;
+        onlineAvailable = [...characters];
+        onlineTurn = room.currentTurn;
+        onlineChat = [];
+        
+        document.getElementById('lobbyScreen').style.display = 'none';
+        document.getElementById('onlineGameScreen').style.display = 'block';
+        document.getElementById('roomCodeDisplay').innerHTML = room.code;
+        document.getElementById('playersInRoom').innerHTML = `👥 ${room.players.map(p => `${p.avatar || '👤'} ${p.name}`).join(' vs ')}`;
+        document.getElementById('onlineMySecret').innerHTML = onlineSecret.name;
+        
+        updateOnlineUI();
+        
+        // Escutar mudanças na sala
+        const roomRef = window.doc(window.db, 'rooms', room.code);
+        roomUnsub = window.onSnapshot(roomRef, (doc) => {
+            if (doc.exists()) {
+                const updatedRoom = doc.data();
+                currentRoom = updatedRoom;
+                onlineTurn = updatedRoom.currentTurn;
+                updateOnlineUI();
+                if (updatedRoom.winner) {
+                    const won = updatedRoom.winner === currentUser.uid;
+                    showVictory(won, won ? 'Você' : updatedRoom.winnerName);
+                }
+            }
+        });
+        showToast(`Jogo iniciado! Seu personagem: ${onlineSecret.name}`);
+    }
+
+    function updateOnlineUI() {
+        const isMyTurn = onlineTurn === currentUser.uid;
+        const turnDiv = document.getElementById('turnDisplay');
+        if (isMyTurn) {
+            turnDiv.innerHTML = '<span class="turn-indicator turn-mine">🎯 SUA VEZ - Faça uma pergunta!</span>';
+        } else {
+            turnDiv.innerHTML = '<span class="turn-indicator turn-opponent">⏳ VEZ DO OPONENTE - Aguarde...</span>';
+        }
+        
+        const grid = document.getElementById('onlineCharactersGrid');
+        grid.innerHTML = onlineAvailable.map(c => `
+            <div class="character-card" onclick="if(onlineGameActive && onlineTurn === '${currentUser.uid}') window.eliminateOnline(${c.id})">
+                <div style="font-size:48px">${c.emoji}</div>
+                <p>${c.name}</p>
+            </div>
+        `).join('');
+        document.getElementById('remainingCount').innerHTML = onlineAvailable.length;
+        
+        document.getElementById('onlineQuestionsList').innerHTML = questions.map(q => `
+            <div class="question-btn" onclick="window.askOnline(${q.id})">
+                ${q.text}
+            </div>
+        `).join('');
+    }
+
+    window.askOnline = function(qId) {
+        if (onlineTurn !== currentUser.uid) { showToast('Não é sua vez!', true); return; }
+        if (onlineWaiting) { showToast('Aguarde a resposta!', true); return; }
+        onlineQuestion = questions.find(q => q.id === qId);
+        onlineWaiting = true;
+        document.getElementById('onlineAnswerArea').style.display = 'block';
+        addOnlineChat('Você', `Perguntou: ${onlineQuestion.text}`);
+        showToast(`Perguntando: ${onlineQuestion.text}`, false);
+    };
+
+    window.submitOnlineAnswer = async function(answer) {
+        if (!onlineQuestion) return;
+        onlineWaiting = false;
+        document.getElementById('onlineAnswerArea').style.display = 'none';
+        
+        const has = onlineOpponent.features.includes(onlineQuestion.feature);
+        const correct = (answer === 'yes' && has) || (answer === 'no' && !has);
+        
+        if (correct) {
+            onlineAvailable = onlineAvailable.filter(c => 
+                answer === 'yes' ? c.features.includes(onlineQuestion.feature) : !c.features.includes(onlineQuestion.feature)
+            );
+            addOnlineChat('Sistema', `✅ Sim! ${onlineQuestion.text}`);
+        } else {
+            onlineAvailable = onlineAvailable.filter(c => 
+                answer === 'yes' ? !c.features.includes(onlineQuestion.feature) : c.features.includes(onlineQuestion.feature)
+            );
+            addOnlineChat('Sistema', `❌ Não! ${onlineQuestion.text}`);
+        }
+        
+        updateOnlineUI();
+        
+        // Verificar vitória
+        if (onlineAvailable.length === 1 && onlineAvailable[0].id === onlineOpponent.id) {
+            await endOnlineGame(true);
+            return;
+        }
+        
+        // Mudar turno
+        const opponentPlayer = currentRoom.players.find(p => p.uid !== currentUser.uid);
+        onlineTurn = opponentPlayer.uid;
+        await window.updateDoc(window.doc(window.db, 'rooms', currentRoom.code), { currentTurn: opponentPlayer.uid });
+        onlineQuestion = null;
+    };
+
+    window.eliminateOnline = async function(charId) {
+        if (onlineTurn !== currentUser.uid) { showToast('Não é sua vez de eliminar!', true); return; }
+        const char = onlineAvailable.find(c => c.id === charId);
+        if (char) {
+            onlineAvailable = onlineAvailable.filter(c => c.id !== charId);
+            updateOnlineUI();
+            addOnlineChat('Sistema', `Você eliminou ${char.name}`);
+            
+            if (onlineAvailable.length === 1 && onlineAvailable[0].id === onlineOpponent.id) {
+                await endOnlineGame(true);
+            }
+        }
+    };
+
+    async function endOnlineGame(won) {
+        onlineGameActive = false;
+        if (roomUnsub) roomUnsub();
+        await updateStats(won);
+        await window.updateDoc(window.doc(window.db, 'rooms', currentRoom.code), { 
+            status: 'finished', 
+            winner: currentUser.uid, 
+            winnerName: userProfile.name 
+        });
+        showVictory(won, userProfile.name);
+    }
+
+    function addOnlineChat(sender, msg) {
+        onlineChat.push({ sender, msg, time: new Date().toLocaleTimeString() });
+        const div = document.getElementById('onlineChatMessages');
+        div.innerHTML = onlineChat.map(m => `<div style="margin-bottom:5px;"><strong style="color:#00B5F7;">${m.sender}:</strong> ${m.msg} <span style="font-size:10px; color:#999;">${m.time}</span></div>`).join('');
+        div.scrollTop = div.scrollHeight;
+    }
+
+    window.sendOnlineMessage = function() {
+        const input = document.getElementById('onlineChatInput');
+        if (input.value.trim()) {
+            addOnlineChat(userProfile.name, input.value);
+            input.value = '';
+        }
+    };
+
+    window.leaveRoom = function() {
+        if (roomUnsub) roomUnsub();
+        if (roomsUnsub) roomsUnsub();
+        onlineGameActive = false;
+        document.getElementById('onlineGameScreen').style.display = 'none';
+        document.getElementById('homeScreen').style.display = 'block';
+    };
+
+    // ==================== MODO ROBÔ ====================
+    window.startRobotGame = function() {
+        const allChars = [...characters];
+        const playerIdx = Math.floor(Math.random() * allChars.length);
+        robotSecret = allChars[playerIdx];
+        allChars.splice(playerIdx, 1);
+        const robotIdx = Math.floor(Math.random() * allChars.length);
+        robotOpponent = allChars[robotIdx];
+        
+        robotAvailable = [...characters];
+        robotTurn = 'player';
+        robotGameActive = true;
+        robotChat = [];
+        robotQuestion = null;
+        robotWaiting = false;
+        
+        document.getElementById('homeScreen').style.display = 'none';
+        document.getElementById('robotGameScreen').style.display = 'block';
+        document.getElementById('mySecretCharacter').innerHTML = robotSecret.name;
+        updateRobotUI();
+        showToast(`🎮 Jogo iniciado! Seu personagem: ${robotSecret.name}. Adivinhe o personagem do robô!`);
+    };
+
+    function updateRobotUI() {
+        const grid = document.getElementById('robotCharactersGrid');
+        grid.innerHTML = robotAvailable.map(c => `
+            <div class="character-card" onclick="if(robotGameActive && robotTurn === 'player') window.eliminateRobot(${c.id})">
+                <div style="font-size:48px">${c.emoji}</div>
+                <p>${c.name}</p>
+            </div>
+        `).join('');
+        document.getElementById('robotRemainingCount').innerHTML = robotAvailable.length;
+        
+        const turnDiv = document.getElementById('robotTurnDisplay');
+        if (robotTurn === 'player') {
+            turnDiv.innerHTML = '<span class="turn-indicator turn-mine">🎯 SUA VEZ</span>';
+        } else {
+            turnDiv.innerHTML = '<span class="turn-indicator turn-opponent">🤖 VEZ DO ROBÔ</span>';
+        }
+        
+        document.getElementById('robotQuestionsList').innerHTML = questions.map(q => `
+            <div class="question-btn" onclick="window.askRobot(${q.id})">
+                ${q.text}
+            </div>
+        `).join('');
+    }
+
+    window.askRobot = function(qId) {
+        if (robotTurn !== 'player') { showToast('Aguarde sua vez!', true); return; }
+        if (robotWaiting) { showToast('Aguarde a resposta anterior!', true); return; }
+        
+        robotQuestion = questions.find(q => q.id === qId);
+        robotWaiting = true;
+        document.getElementById('robotAnswerArea').style.display = 'block';
+        addRobotChat('Você', `Perguntou: ${robotQuestion.text}`);
+        
+        setTimeout(() => {
+            const has = robotOpponent.features.includes(robotQuestion.feature);
+            const answer = has ? 'yes' : 'no';
+            document.getElementById('robotAnswerArea').style.display = 'none';
+            processRobotAnswer(answer);
+        }, 1000);
+    };
+
+    window.submitRobotAnswer = function(answer) {
+        if (robotQuestion && robotWaiting) {
+            document.getElementById('robotAnswerArea').style.display = 'none';
+            processRobotAnswer(answer);
+        }
+    };
+
+    function processRobotAnswer(answer) {
+        robotWaiting = false;
+        const has = robotOpponent.features.includes(robotQuestion.feature);
+        const correct = (answer === 'yes' && has) || (answer === 'no' && !has);
+        
+        if (correct) {
+            robotAvailable = robotAvailable.filter(c => 
+                answer === 'yes' ? c.features.includes(robotQuestion.feature) : !c.features.includes(robotQuestion.feature)
+            );
+            addRobotChat('Robô', `✅ Sim! ${robotQuestion.text}`);
+        } else {
+            robotAvailable = robotAvailable.filter(c => 
+                answer === 'yes' ? !c.features.includes(robotQuestion.feature) : c.features.includes(robotQuestion.feature)
+            );
+            addRobotChat('Robô', `❌ Não! ${robotQuestion.text}`);
+        }
+        
+        updateRobotUI();
+        
+        if (robotAvailable.length === 1 && robotAvailable[0].id === robotOpponent.id) {
+            robotVictory(true);
+            return;
+        }
+        
+        robotTurn = 'opponent';
+        updateRobotUI();
+        setTimeout(robotAITurn, 1500);
+        robotQuestion = null;
+    }
+
+    window.eliminateRobot = function(charId) {
+        if (robotTurn !== 'player') { showToast('Aguarde sua vez!', true); return; }
+        const char = robotAvailable.find(c => c.id === charId);
+        if (char) {
+            robotAvailable = robotAvailable.filter(c => c.id !== charId);
+            updateRobotUI();
+            addRobotChat('Sistema', `Você eliminou ${char.name}`);
+            
+            if (robotAvailable.length === 1 && robotAvailable[0].id === robotOpponent.id) {
+                robotVictory(true);
+            }
+        }
+    };
+
+    function robotAITurn() {
+        if (!robotGameActive || robotTurn !== 'opponent') return;
+        
+        const randomQ = questions[Math.floor(Math.random() * questions.length)];
+        addRobotChat('Robô', `🤖 Pergunta: ${randomQ.text}`);
+        
+        setTimeout(() => {
+            const has = robotSecret.features.includes(randomQ.feature);
+            addRobotChat('Robô', `🤖 Resposta: ${has ? 'Sim' : 'Não'}`);
+            
+            if (robotAvailable.length > 0) {
+                const toEliminate = robotAvailable.filter(c => 
+                    has ? !c.features.includes(randomQ.feature) : c.features.includes(randomQ.feature)
+                );
+                if (toEliminate.length > 0) {
+                    const eliminated = toEliminate[0];
+                    robotAvailable = robotAvailable.filter(c => c.id !== eliminated.id);
+                    addRobotChat('Robô', `🤖 Eliminou ${eliminated.name}!`);
+                    updateRobotUI();
+                }
+            }
+            
+            if (!robotAvailable.find(c => c.id === robotOpponent.id)) {
+                robotVictory(false);
+                return;
+            }
+            
+            robotTurn = 'player';
+            updateRobotUI();
+            addRobotChat('Sistema', '🎯 Sua vez! Faça uma pergunta ou elimine um personagem.');
+            
+        }, 1500);
+    }
+
+    function robotVictory(won) {
+        robotGameActive = false;
+        updateStats(won);
+        showVictory(won, won ? 'Você' : 'Robô');
+    }
+
+    function addRobotChat(sender, msg) {
+        robotChat.push({ sender, msg, time: new Date().toLocaleTimeString() });
+        const div = document.getElementById('robotChatMessages');
+        div.innerHTML = robotChat.map(m => `<div style="margin-bottom:5px;"><strong style="color:#00B5F7;">${m.sender}:</strong> ${m.msg} <span style="font-size:10px; color:#999;">${m.time}</span></div>`).join('');
+        div.scrollTop = div.scrollHeight;
+    }
+
+    window.sendRobotMessage = function() {
+        const input = document.getElementById('robotChatInput');
+        if (input.value.trim()) {
+            addRobotChat(userProfile.name, input.value);
+            input.value = '';
+            setTimeout(() => {
+                const responses = ['D\'oh!', 'Interessante...', 'Continue assim!', '🍩', 'Legal!', 'Hmm...', '🤔'];
+                addRobotChat('Robô', responses[Math.floor(Math.random() * responses.length)]);
+            }, 800);
+        }
+    };
+
+    // ==================== UTILITÁRIOS ====================
+    function showVictory(won, winnerName) {
+        const title = won ? '🎉 VITÓRIA! 🎉' : '😢 DERROTA!';
+        const message = won ? `Parabéns! Você venceu ${winnerName}!` : `${winnerName} venceu! Tente novamente!`;
+        document.getElementById('victoryTitle').innerHTML = title;
+        document.getElementById('victoryMessage').innerHTML = message;
+        document.getElementById('victoryModal').classList.add('active');
+        if (won) createConfetti();
+    }
+
+    window.playAgain = function() {
+        closeModal('victoryModal');
+        if (document.getElementById('robotGameScreen').style.display === 'block') {
+            window.startRobotGame();
+        } else {
+            window.backToHome();
+        }
+    };
+
+    window.backToHome = function() {
+        if (roomUnsub) roomUnsub();
+        if (roomsUnsub) roomsUnsub();
+        document.getElementById('lobbyScreen').style.display = 'none';
+        document.getElementById('onlineGameScreen').style.display = 'none';
+        document.getElementById('robotGameScreen').style.display = 'none';
+        document.getElementById('homeScreen').style.display = 'block';
+        robotGameActive = false;
+        onlineGameActive = false;
+    };
+
+    window.closeModal = function(id) { 
+        document.getElementById(id).classList.remove('active'); 
+    };
+
+    function showToast(msg, err = false) {
+        const t = document.createElement('div');
+        t.className = 'toast';
+        t.style.background = err ? '#f44336' : '#4CAF50';
+        t.textContent = msg;
+        document.body.appendChild(t);
+        setTimeout(() => t.remove(), 3000);
+    }
+
+    function createConfetti() {
+        for (let i = 0; i < 80; i++) {
+            const c = document.createElement('div');
+            c.style.cssText = `position:fixed; left:${Math.random()*window.innerWidth}px; top:-10px; width:8px; height:8px; background:hsl(${Math.random()*360},100%,50%); border-radius:2px; animation:confettiFall ${2+Math.random()*2}s linear forwards; z-index:9999;`;
+            document.body.appendChild(c);
+            setTimeout(() => c.remove(), 3000);
+        }
+    }
+
+    function createClouds() {
+        for (let i = 0; i < 8; i++) {
+            const c = document.createElement('div');
+            c.className = 'cloud';
+            const s = 60 + Math.random() * 120;
+            c.style.cssText = `width:${s}px; height:${s*0.6}px; top:${Math.random()*100}%; left:${Math.random()*100}%; animation-duration:${20+Math.random()*40}s; animation-delay:${Math.random()*20}s;`;
+            document.getElementById('clouds').appendChild(c);
+        }
+    }
+
+    const style = document.createElement('style');
+    style.textContent = `@keyframes confettiFall { to { transform: translateY(100vh) rotate(360deg); opacity: 0; } }`;
+    document.head.appendChild(style);
+    createClouds();
+
+    window.onAuthStateChanged(window.auth, async (user) => {
+        if (user) {
+            currentUser = user;
+            const ref = window.doc(window.db, 'users', user.uid);
+            const snap = await window.getDoc(ref);
+            if (snap.exists()) {
+                userProfile = snap.data();
+            } else {
+                userProfile = { uid: user.uid, name: user.displayName, avatar: '👤', wins: 0, losses: 0, matches: 0 };
+                await window.setDoc(ref, userProfile);
+            }
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('homeScreen').style.display = 'block';
+            updateUI();
+        } else {
+            document.getElementById('homeScreen').style.display = 'none';
+            document.getElementById('loginScreen').style.display = 'block';
+        }
+    });
+</script>
+</body>
+</html>
